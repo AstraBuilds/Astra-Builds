@@ -5,13 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AstraBuilds — Hazır Parça Listeleri</title>
 <meta name="description" content="Topluluk tarafından derlenen bilgisayar buildlerinin hazır parça listeleri. Satış yapılmaz, reklam yoktur." />
-
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <style>
 /* ============================================================
    AstraBuilds — stil dosyası
@@ -834,6 +831,24 @@ button:focus-visible {
   }
 }
 
+/* ---------- Link satırı: PCPartPicker + paylaş + sil ---------- */
+
+.link-block {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.share-btn {
+  padding: 9px 14px;
+  font-size: 0.85rem;
+}
+
+.link-block .delete-btn {
+  margin-left: auto;
+}
+
 </style>
 </head>
 <body>
@@ -1094,6 +1109,34 @@ button:focus-visible {
     if (m.indexOf("password should be at least") !== -1) return "Şifre en az 6 karakter olmalı.";
     if (m.indexOf("email not confirmed") !== -1) return "Hesap onayı bekliyor gibi görünüyor.";
     return message || "Bir şeyler ters gitti, tekrar dene.";
+  }
+
+  function buildShareUrl(buildId) {
+    return window.location.origin + window.location.pathname + "#build-" + buildId;
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      // yedek yönteme düş
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   function setBusy(button, busy, restingLabel) {
@@ -1380,6 +1423,7 @@ button:focus-visible {
           </div>
           <div class="link-block">
             <a class="ppp-link" data-ppp-link target="_blank" rel="noopener noreferrer">PCPartPicker Listesini Gör</a>
+            <button type="button" class="btn share-btn" data-share-build>Linki Kopyala</button>
             ${canDelete ? '<button type="button" class="delete-btn" data-delete-build>Bu listeyi sil</button>' : ""}
           </div>
         </div>
@@ -1399,6 +1443,7 @@ button:focus-visible {
     visible.forEach((build) => {
       const card = document.createElement("article");
       card.className = "card";
+      card.id = "build-" + build.id;
       card.dataset.tier = build.tier || "";
       card.innerHTML = cardMarkup(build);
 
@@ -1419,6 +1464,14 @@ button:focus-visible {
         toggle.textContent = isExpanded ? "Detayları Gizle" : "Detayları Gör";
       });
 
+      const shareBtn = card.querySelector("[data-share-build]");
+      if (shareBtn) {
+        shareBtn.addEventListener("click", async () => {
+          const ok = await copyToClipboard(buildShareUrl(build.id));
+          showToast(ok ? "Link kopyalandı!" : "Kopyalanamadı, adres çubuğundaki linki elle kopyala.");
+        });
+      }
+
       const deleteBtn = card.querySelector("[data-delete-build]");
       if (deleteBtn) {
         deleteBtn.addEventListener("click", () => handleDeleteBuild(build.id));
@@ -1426,6 +1479,34 @@ button:focus-visible {
 
       grid.appendChild(card);
     });
+  }
+
+  // Bir linkle doğrudan gelindiyse (ör. #build-<id>), o build'i
+  // filtreye takılmadan aç ve ekrana getir.
+  function focusBuildFromHash() {
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    const match = allBuilds.find((b) => "build-" + b.id === hash);
+    if (!match) return;
+
+    if (activeFilter !== "Tümü" && activeFilter !== match.tier) {
+      activeFilter = "Tümü";
+      renderFilters();
+      renderGrid();
+    }
+
+    const card = document.getElementById(hash);
+    if (!card) return;
+    if (!card.classList.contains("is-expanded")) {
+      card.classList.add("is-expanded");
+      const toggle = card.querySelector(".card-toggle");
+      if (toggle) toggle.textContent = "Detayları Gizle";
+    }
+    const reduceMotion =
+      !!window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (typeof card.scrollIntoView === "function") {
+      card.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }
   }
 
   async function fetchBuilds() {
@@ -1447,6 +1528,7 @@ button:focus-visible {
     }
     renderFilters();
     renderGrid();
+    focusBuildFromHash();
   }
 
   async function handleDeleteBuild(buildId) {
@@ -1590,6 +1672,8 @@ button:focus-visible {
       }
       openBuildModal();
     });
+
+    window.addEventListener("hashchange", focusBuildFromHash);
   }
 
   async function init() {
@@ -1618,6 +1702,7 @@ button:focus-visible {
     isValidPcPartPickerUrl,
     usernameToEmail,
     friendlyAuthError,
+    buildShareUrl,
   };
 })();
 
